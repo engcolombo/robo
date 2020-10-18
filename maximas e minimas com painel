@@ -106,7 +106,23 @@ int OnInit()
    ObjectSetInteger(0, "Background", OBJPROP_BORDER_TYPE, BORDER_FLAT);
    ObjectSetInteger(0, "Background", OBJPROP_BORDER_COLOR, clrBlack);
    
-     // Iniciar valores
+    // Criar campos
+   for(int i=0; i<ArraySize(infos); i++)
+     {
+      if(!ObjectCreate(0, infos[i], OBJ_LABEL, 0, 0, 0))
+         return(INIT_FAILED);
+         
+      ObjectSetInteger(0, infos[i], OBJPROP_ANCHOR, ANCHOR_LEFT_UPPER);
+      ObjectSetInteger(0, infos[i], OBJPROP_CORNER, CORNER_LEFT_LOWER);
+      ObjectSetInteger(0, infos[i], OBJPROP_XDISTANCE, delta_x + 5);
+      ObjectSetInteger(0, infos[i], OBJPROP_YDISTANCE, delta_y - 5 + y_size - i*line_size);
+      
+      ObjectSetInteger(0, infos[i], OBJPROP_COLOR, clrBlack);
+      ObjectSetInteger(0, infos[i], OBJPROP_FONTSIZE, 10);
+      ObjectSetString(0, infos[i], OBJPROP_TEXT, infos[i]);
+     }
+     
+   // Iniciar valores
    for(int i=0; i<ArraySize(infos); i++)
      {
       string name = infos[i] + "Valor";
@@ -122,7 +138,6 @@ int OnInit()
       ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 10);
       ObjectSetString(0, name, OBJPROP_TEXT, "-");
      }
-    
   
    //--- Get the handle for Moving Average indicator
    MA_max_handle=iMA(_Symbol,mm_tempo_grafico,MA_Period_max,deslocamento,MODE_SMA,PRICE_HIGH);
@@ -157,9 +172,17 @@ int OnInit()
 void OnDeinit(const int reason)
   {
   
- //  Comment("Função OnDeinit iniciada");
- //--- Remover o painel do gráfico
+ 
+ 
+    //--- Remover o painel do gráfico
    ObjectDelete(0, "Background");
+   for(int i=0; i<ArraySize(infos); i++)
+     ObjectDelete(0, infos[i]);
+   for(int i=0; i<ArraySize(infos); i++)
+     ObjectDelete(0, infos[i]+"Valor");
+     
+     
+     
        IndicatorRelease(MA_max_handle);
        IndicatorRelease(MA_min_handle);
        IndicatorRelease(MA_filter_handle);
