@@ -16,29 +16,42 @@ enum _Enummedia
 
 
 sinput string s3; //---------------------------
-input int num_lots                         = 1;           // Número de Lotes 
+input int num_lots                         = 100;           // Número de Lotes 
 input ENUM_TIMEFRAMES mm_tempo_grafico     = PERIOD_CURRENT;// Tempo Gráfico
-input int magic_number = 123;   // Nº mágico do robô
-sinput string s1; //-----------Médias Móveis-------------//
+input int magic_number = 1238;   // Nº mágico do robô
+//sinput string s1; //-----------Médias Móveis-------------//
 int i=1;
-input int MA_Period_max = 2;         //Periodo de média máxima
-input int MA_Period_min = 2;         //Periodo de média mínima
-int i2=1;
-input _Enummedia ma_encerra = 0; // usa media movel como stop 
-input int MA_filter = 17;          //Periodo de média filtro  // grafico diario recomendado 50 // daytrade 17
-input int deslocamento = 1; // deslocamento das medias maxima e minima 
 
-sinput string s5; //---------------------------
-input _Enummedia media_filtro_media = 1; // usar medias para so operar tendencia 
+int i2=1;
+
+sinput string s2; //-----------condicoes de entrada da operacao-------------
+
+input _Enummedia operar_no_fechamento = 0; // operar no fechamento do candle 
+input string hora_limite_abre_op          = "16:28";      // hora abrir operacao 
+input ENUM_APPLIED_PRICE ifr_preco         = PRICE_CLOSE;   // Preço Aplicado
+input _Enummedia media_filtro_media = 0; // usar medias para so operar tendencia 
+
 input int media_filtro2 = 9; // periodo da media rapida
 input int media_filtro3 = 17; // periodo da media lenta 
 
+sinput string s6; //-----------IFR-------------
+input int ifr_periodo                      = 2;             // Período IFR
+input int ifr_sobrecompra                  = 70;            // Nível de Sobrecompra
+input int ifr_sobrevenda                   = 20;            // Nível de Sobrevenda
+
+sinput string s8; //--------------------------- saida da operacao
+input int deslocamento = 1; // deslocamento das medias maxima e minima 
+input int MA_Period_max = 2;         //Periodo de média máxima
+
 
 sinput string s4; //---------------------------
-input _Enummedia operacoes_daytrade = 1; // operacoes daytrade  
+input _Enummedia operacoes_daytrade = 0; // operacoes daytrade  
 input string hora_limite_fecha_op          = "16:26";       // Horário Limite Fechar Posição 
-input _Enummedia encerrar_finaldodia = 1; // encerrar posições fim do dia 
+
+input _Enummedia encerrar_finaldodia = 0; // encerrar posições fim do dia 
 input string hora_limite_encerra = "17:02";        // Horario limite para encerrar posições 
+
+input string hora_limite_opera = "16:50"; // horario limite oeprar acoes nao pode se rmaior que 16:50 
 
 //+------------------------------------------------------------------+
 //|  Variáveis para os indicadores                                   |
@@ -46,15 +59,15 @@ input string hora_limite_encerra = "17:02";        // Horario limite para encerr
 
 
 int MA_max_handle;                 // Handle para a média móvel máxima
-int MA_min_handle;                 // Handle para a média móvel mínima
-int MA_filter_handle;                // media filtro 
 int media_filtro2_handle;             // media tendencia 
 int media_filtro3_handle;             // media tendencia 
-double ma_min_Val[];               // Array dinâmico para conter a média móvel mínima
-double ma_max_Val[];               // Array dinâmico para conter a média móvel mínima
-double ma_filter_Val[];            // media para filtro 
+double ma_max_Val[];               // Array dinâmico para conter a média móvel mínima 
 double media_filtro2_val[];         // media tendencia 
 double media_filtro3_val[];           // media tendencia 
+
+//--- IFR
+int ifr_Handle;           // Handle controlador para o IFR
+double ifr_Buffer[];      // Buffer para armazenamento dos dados do IFR
 
   bool Comprar = false; // Pode comprar?
   bool encerrarcompras = false; 
@@ -83,13 +96,13 @@ int OnInit()
     
    //    Comment("Função OnInit iniciada");
    //--- Get the handle for Moving Average indicator
-   MA_max_handle=iMA(_Symbol,mm_tempo_grafico,MA_Period_max,deslocamento,MODE_SMA,PRICE_HIGH);
-   MA_min_handle=iMA(_Symbol,mm_tempo_grafico,MA_Period_min,deslocamento,MODE_SMA,PRICE_LOW);
-   MA_filter_handle=iMA(_Symbol,mm_tempo_grafico,MA_filter,0,MODE_SMA,PRICE_CLOSE);
+      MA_max_handle=iMA(_Symbol,mm_tempo_grafico,MA_Period_max,deslocamento,MODE_SMA,PRICE_HIGH);
     media_filtro2_handle = iMA(_Symbol,mm_tempo_grafico,media_filtro2,0,MODE_SMA,PRICE_CLOSE);
    media_filtro3_handle =iMA (_Symbol,mm_tempo_grafico,media_filtro3,0,MODE_SMA,PRICE_CLOSE);
+   
+     ifr_Handle = iRSI(_Symbol,mm_tempo_grafico,ifr_periodo,ifr_preco);
 //--- What if handle returns Invalid Handle
-    if(MA_max_handle < 0 || MA_min_handle < 0 || MA_filter_handle < 0 || media_filtro2_handle < 0 || media_filtro3_handle < 0)
+    if(MA_max_handle < 0 || media_filtro2_handle < 0 || media_filtro3_handle < 0 || ifr_Handle < 0)
      {
       Alert("Error Creating Handles for indicators - error: ",GetLastError(),"!!");
      }
@@ -98,8 +111,7 @@ int OnInit()
 
     
    ChartIndicatorAdd(0,0,MA_max_handle);
-   ChartIndicatorAdd(0,0,MA_min_handle);
-   ChartIndicatorAdd(0,0,MA_filter_handle);
+      ChartIndicatorAdd(0,1,ifr_Handle);
    ChartIndicatorAdd(0,0,media_filtro2_handle);
    ChartIndicatorAdd(0,0,media_filtro3_handle);
    //---
@@ -115,9 +127,8 @@ void OnDeinit(const int reason)
   
  //  Comment("Função OnDeinit iniciada");
 
+  IndicatorRelease(ifr_Handle);
        IndicatorRelease(MA_max_handle);
-       IndicatorRelease(MA_min_handle);
-       IndicatorRelease(MA_filter_handle);
               IndicatorRelease(media_filtro2_handle);
          IndicatorRelease(media_filtro3_handle);
   }
@@ -132,26 +143,22 @@ void OnTick()
 //---
     // Copiar um vetor de dados tamanho três para o vetor mm_Buffer
     CopyBuffer(MA_max_handle,0,0,3,ma_max_Val);
-    CopyBuffer(MA_min_handle,0,0,3,ma_min_Val);
-    CopyBuffer(MA_filter_handle,0,0,3,ma_filter_Val);
+       CopyBuffer(ifr_Handle,0,0,4,ifr_Buffer);
       CopyBuffer(media_filtro2_handle,0,0,3,media_filtro2_val);
      CopyBuffer(media_filtro3_handle,0,0,3,media_filtro3_val);
     
     //--- Alimentar Buffers das rates com dados:
     CopyRates(_Symbol,mm_tempo_grafico,0,6,rates);
     ArraySetAsSeries(rates,true);
+       ArraySetAsSeries(ifr_Buffer,true);
     
     // Ordenar o vetor de dados:
     ArraySetAsSeries(ma_max_Val,true);
-    ArraySetAsSeries(ma_min_Val,true);
-    ArraySetAsSeries(ma_filter_Val,true);
        ArraySetAsSeries(media_filtro2_val,true);
       ArraySetAsSeries(media_filtro3_val,true);
     //---
     
    ChartIndicatorAdd(0,0,MA_max_handle);
-   ChartIndicatorAdd(0,0,MA_min_handle);
-   ChartIndicatorAdd(0,0,MA_filter_handle);
      ChartIndicatorAdd(0,0,media_filtro2_handle);
    ChartIndicatorAdd(0,0,media_filtro3_handle);
    
@@ -180,17 +187,7 @@ void OnTick()
       return;
      }
      
-   if(CopyBuffer(MA_min_handle,0,0,3,ma_min_Val)<0)
-     {
-      Alert("Error copying Min Moving Average indicator buffer - error:",GetLastError());
-     return;
-     }
-     
-   if(CopyBuffer(MA_filter_handle,0,0,3,ma_filter_Val)<0)
-     {
-      Alert("Error copying Min Moving Average indicator buffer - error:",GetLastError());
-      return;
-     }
+
      
           
         if(CopyBuffer(media_filtro2_handle,0,0,3,media_filtro2_val)<0)
@@ -207,23 +204,28 @@ void OnTick()
      
    
     // LOGICA PARA ATIVAR COMPRA 
-    bool compra_m_filtro = (tick.ask < ma_min_Val[0]) && (Comprar == false) && (encerrarcompras == false) && (tick.ask < ma_max_Val[0]) && ( encerrarcompras_fimdia == false );
+    
+    bool compra_m_filtro = ((TimeToString(TimeCurrent(),TIME_MINUTES)<= hora_limite_opera ) && (ifr_Buffer[0] <= ifr_sobrevenda) && (Comprar == false) && (encerrarcompras == false) &&  ( encerrarcompras_fimdia == false ));
                               
     
     // LÓGICA PARA ATIVAR VENDA
-    bool venda_mm_cros = ((tick.ask >= ma_max_Val[0]) && (Comprar == true)); 
+ 
+    bool venda_mm_cros = ((tick.ask >= ma_max_Val[0]) && (Comprar == true) && (TimeToString(TimeCurrent(),TIME_MINUTES)<= hora_limite_opera )); 
     
-    // logica venda stop media movel 
-
-    bool venda_stop = ((rates[1].close < ma_filter_Val[1]) && (Comprar == true ));
+    bool temosNovaVela = TemosNovaVela();
     
     // logica venda stop tempo 
     
     bool venda_stop_tempo = ((encerrar_finaldodia == 1) && (TimeToString(TimeCurrent(),TIME_MINUTES) > hora_limite_encerra));
   
-     // compra sem media rapida e lenta como filtro mas media principal como filtro 
+     // compra no fechamento sem media e com media para realizar 
+if ( operar_no_fechamento == 1)
+{
 
-    if((media_filtro_media == 0) && (compra_m_filtro == true) && (Comprar == false) && ( venda_stop_tempo == false ) && (rates[1].close > ma_filter_Val[0]) && (rates[1].close > ma_filter_Val[1]) && (venda_stop == false ) && (tick.last > ma_filter_Val[0]) )
+
+if (operacoes_daytrade == 0 ) 
+{
+    if((TimeToString(TimeCurrent(),TIME_MINUTES)>= hora_limite_abre_op ) && (media_filtro_media == 0) && (compra_m_filtro == true) && (Comprar == false) && ( venda_stop_tempo == false ) )
       {
        Comment("temos uma compra");
           desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
@@ -232,11 +234,58 @@ void OnTick()
       
       //compra com media rapida e lenta como filtro e media principal como filtro 
       
-        if((media_filtro_media == 1) && (compra_m_filtro == true) && (Comprar == false) && ( venda_stop_tempo == false ) && (rates[1].close > ma_filter_Val[0]) && (rates[1].close > ma_filter_Val[1]) && (venda_stop == false ) && (tick.last > ma_filter_Val[0]) && (media_filtro2_val[0] > media_filtro3_val[0]) )
+        if((TimeToString(TimeCurrent(),TIME_MINUTES)>= hora_limite_abre_op ) && (media_filtro_media == 1) && (compra_m_filtro == true) && (Comprar == false) && ( venda_stop_tempo == false ) && (media_filtro2_val[0] > media_filtro3_val[0]) )
+      {
+       Comment("temos uma compra com medias");
+          desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
+          CompraAMercado();    
+      }
+      }
+      
+      if (operacoes_daytrade == 1 ) 
+      {
+      
+          if((temosNovaVela == true ) && (TimeToString(TimeCurrent(),TIME_MINUTES)>= hora_limite_abre_op ) && (media_filtro_media == 0) && (compra_m_filtro == true) && (Comprar == false) && ( venda_stop_tempo == false ) )
       {
        Comment("temos uma compra");
           desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
           CompraAMercado();    
+      }
+      
+      //compra com media rapida e lenta como filtro e media principal como filtro 
+      
+        if((temosNovaVela == true) && (TimeToString(TimeCurrent(),TIME_MINUTES)>= hora_limite_abre_op ) && (media_filtro_media == 1) && (compra_m_filtro == true) && (Comprar == false) && ( venda_stop_tempo == false ) && (media_filtro2_val[0] > media_filtro3_val[0]) )
+      {
+       Comment("temos uma compra com medias");
+          desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
+          CompraAMercado();    
+      }
+      }
+      
+      
+
+      
+      }
+      // compra sem media e com media sem fechamento 
+      if ( operar_no_fechamento == 0)
+{
+
+    if((media_filtro_media == 0) && (compra_m_filtro == true) && (Comprar == false) && ( venda_stop_tempo == false ) )
+      {
+       Comment("temos uma compra");
+          desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
+          CompraAMercado();    
+      }
+      
+      //compra com media rapida e lenta como filtro e media principal como filtro 
+      
+        if((media_filtro_media == 1) && (compra_m_filtro == true) && (Comprar == false) && ( venda_stop_tempo == false ) && (media_filtro2_val[0] > media_filtro3_val[0]) )
+      {
+       Comment("temos uma compra com medias");
+          desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
+          CompraAMercado();    
+      }
+      
       }
       
       //venda normal da operacao na madia da maxima 
@@ -248,21 +297,12 @@ void OnTick()
           desenhaLinhaVertical("Venda",rates[0].time,clrRed);
           VendaAMercado();
          } 
-         
-         //venda na media filtro principal 
-         
-         if ((venda_stop == true) && (ma_encerra == 1) && ( Comprar == true) )
-         {
-          Comment("temos uma venda stop");
-          desenhaLinhaVertical("Venda",rates[0].time,clrRed);
-          FechaCompra();
-          }
           
           //venda no tempo 
           
            if ((venda_stop_tempo == true) && (encerrar_finaldodia == 1) && ( Comprar == true) )
          {
-          Comment("temos uma venda stop tempo");
+          Comment("temos uma venda stop tempo daytrade");
           desenhaLinhaVertical("Venda",rates[0].time,clrRed);
           FechaCompra();
           }
@@ -440,4 +480,34 @@ void FechaCompra()
            Print("Erro ao enviar Ordem Venda. Erro = ", GetLastError());
            ResetLastError();
           }
-   }
+ 
+     }
+//+------------------------------------------------------------------+
+//| FUNÇÕES ÚTEIS                                                    |
+//+------------------------------------------------------------------+
+//--- Para Mudança de Candle
+bool TemosNovaVela()
+  {
+//--- memoriza o tempo de abertura da ultima barra (vela) numa variável
+   static datetime last_time=0;
+//--- tempo atual
+   datetime lastbar_time= (datetime) SeriesInfoInteger(_Symbol,mm_tempo_grafico,SERIES_LASTBAR_DATE);
+
+//--- se for a primeira chamada da função:
+   if(last_time==0)
+     {
+      //--- atribuir valor temporal e sair
+      last_time=lastbar_time;
+      return(false);
+     }
+
+//--- se o tempo estiver diferente:
+   if(last_time!=lastbar_time)
+     {
+      //--- memorizar esse tempo e retornar true
+      last_time=lastbar_time;
+      return(true);
+     }
+//--- se passarmos desta linha, então a barra não é nova; retornar false
+   return(false);
+  }
