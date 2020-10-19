@@ -355,26 +355,7 @@ void OnTick()
    //--- Atualizar as informações do painel
    string posicao = "Nenhuma";
 
-if ( _Symbol != "win$" || _Symbol != "winz20")
-{
-      if(PositionSelect(_Symbol))
-       {
-      if(PositionGetInteger(POSITION_TYPE)==POSITION_TYPE_BUY)
-         posicao = "Comprado";
-      }
-     
-                  if ( posicao == "Comprado")
-          {
-        atualresultado2 = (SymbolInfoDouble(_Symbol, SYMBOL_LAST)) - (HistoryOrderGetDouble(ticket,ORDER_PRICE_CURRENT));
-       atualresultado =   NormalizeDouble (atualresultado2 * num_lots, 2);
-       
-       }
-       
-      if  ( posicao == "Nenhuma")
-       {
-       atualresultado = 0;
-       }
-  }
+
  if ( _Symbol == "WIN$" || _Symbol == "WINZ20")
        {
        
@@ -396,6 +377,26 @@ if ( _Symbol != "win$" || _Symbol != "winz20")
        atualresultado = 0;
        }
        }
+       else 
+       {
+      if(PositionSelect(_Symbol))
+       {
+      if(PositionGetInteger(POSITION_TYPE)==POSITION_TYPE_BUY)
+         posicao = "Comprado";
+      }
+     
+                  if ( posicao == "Comprado")
+          {
+        atualresultado2 = (SymbolInfoDouble(_Symbol, SYMBOL_LAST)) - (HistoryOrderGetDouble(ticket,ORDER_PRICE_CURRENT));
+       atualresultado =   NormalizeDouble (atualresultado2 * num_lots, 2);
+       
+       }
+       
+      if  ( posicao == "Nenhuma")
+       {
+       atualresultado = 0;
+       }
+  }
        
    ObjectSetString(0, infos[0] + "Valor", OBJPROP_TEXT, _Symbol);
    ObjectSetString(0, infos[1] + "Valor", OBJPROP_TEXT, num_lots);
