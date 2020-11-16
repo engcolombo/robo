@@ -1,0 +1,822 @@
+//+------------------------------------------------------------------+
+//|                                            media das minimas.mq5 |
+//|                                                  Copyright 2020. |
+//|                                             https://www.mql5.com |
+//+------------------------------------------------------------------+
+#property copyright "felipe paris Copyright 2020."
+#property link      "https://www.mql5.com"
+#property version   "2.00 painel 201113"
+//---
+
+//painel
+#include <Trade\Trade.mqh> // Get code from other places
+CTrade trade;
+
+string infos[6] = {"Símbolo", "Quantidade", "Posição em aberto", "Valor Atual", "Trades realizados", "Lucro/ Prejuizo " };
+
+enum _Enummedia
+  {
+   _false       = 0,           // False
+   _true       = 1           // True
+  };
+
+
+
+sinput string s3; //kkhjkk----------Operadores------
+input int num_lots                         = 1;           // Número de Lotes
+input ENUM_TIMEFRAMES mm_tempo_grafico     = PERIOD_CURRENT;// Tempo Gráfico
+input int magic_number = 123;   // Nº mágico do robô
+sinput string s1; //-----------Médias Móveis-------------//
+
+input int MA_Period_max = 2;         //Periodo de média máxima
+input int MA_Period_min = 2;         //Periodo de média mínima
+input int deslocamento = 1; // deslocamento das medias maxima e minima
+
+
+sinput string s12; //-----------Médias Móveis filtro-------------//
+
+input _Enummedia media_filtro = 1; // true para usar media movel como filtro
+input _Enummedia ma_encerra = 0; // usa media movel como stop
+input int MA_filter = 50;          //Periodo de média filtro
+// grafico diario recomendado 50 // daytrade 17
+
+sinput string s5; //---------------------------
+input _Enummedia media_filtro_media = 0; // usar medias para so operar tendencia
+input int media_filtro2 = 9; // periodo da media rapida
+input int media_filtro3 = 17; // periodo da media lenta
+
+
+sinput string s4; //-----------------horarios ----------
+input _Enummedia operar_no_fechamento = 1; // evitar leilao de abertura acoes
+input string hora_limite_abre_op          = "10:04";      // hora abrir operacao
+
+input _Enummedia operacoes_daytrade = 0; // operacoes daytrade
+input string hora_limite_fecha_op          = "16:26";       // Horário Limite Fechar Posição
+input _Enummedia encerrar_finaldodia = 0; // encerrar posições fim do dia
+input string hora_limite_encerra = "17:02";        // Horario limite para encerrar posições
+
+
+//+------------------------------------------------------------------+
+//|  Variáveis para os indicadores                                   |
+//+------------------------------------------------------------------+
+
+
+
+int i2=1;
+int i3=1;
+int MA_max_handle;                 // Handle para a média móvel máxima
+int MA_min_handle;                 // Handle para a média móvel mínima
+int MA_filter_handle;                // media filtro
+int media_filtro2_handle;             // media tendencia
+int media_filtro3_handle;             // media tendencia
+double ma_min_Val[];               // Array dinâmico para conter a média móvel mínima
+double ma_max_Val[];               // Array dinâmico para conter a média móvel mínima
+double ma_filter_Val[];            // media para filtro
+double media_filtro2_val[];         // media tendencia
+double media_filtro3_val[];           // media tendencia
+
+
+
+bool Comprar = false; // Pode comprar?
+double volume;
+bool encerrarcompras = false;
+bool encerrarcompras_fimdia = false;
+bool media_filtro_media_operacao = false;
+
+
+
+
+//+------------------------------------------------------------------+
+//| Variáveis para as funçoes                                        |
+//+------------------------------------------------------------------+
+
+
+
+MqlRates rates[];            // Variável para armazenar rates
+MqlTick tick;                // variável para armazenar ticks
+
+
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+
+
+//painel
+//---
+   int delta_x = 10;
+   int delta_y = 10;
+   int x_size = 200;
+   int line_size = 15;
+   int y_size = line_size*ArraySize(infos)+10;
+
+//--- Criar o painel
+
+// Background
+   if(!ObjectCreate(0, "Background", OBJ_RECTANGLE_LABEL, 0, 0, 0))
+      return(INIT_FAILED);
+
+   ObjectSetInteger(0, "Background", OBJPROP_CORNER, CORNER_LEFT_LOWER);
+   ObjectSetInteger(0, "Background", OBJPROP_XDISTANCE, delta_x);
+   ObjectSetInteger(0, "Background", OBJPROP_YDISTANCE, y_size + delta_y);
+   ObjectSetInteger(0, "Background", OBJPROP_XSIZE, x_size);
+   ObjectSetInteger(0, "Background", OBJPROP_YSIZE, y_size);
+
+   ObjectSetInteger(0, "Background", OBJPROP_BGCOLOR, clrBlack);
+   ObjectSetInteger(0, "Background", OBJPROP_BORDER_TYPE, BORDER_FLAT);
+   ObjectSetInteger(0, "Background", OBJPROP_BORDER_COLOR, clrBlack);
+
+// Criar campos
+   for(int i=0; i<ArraySize(infos); i++)
+     {
+      if(!ObjectCreate(0, infos[i], OBJ_LABEL, 0, 0, 0))
+         return(INIT_FAILED);
+
+      ObjectSetInteger(0, infos[i], OBJPROP_ANCHOR, ANCHOR_LEFT_UPPER);
+      ObjectSetInteger(0, infos[i], OBJPROP_CORNER, CORNER_LEFT_LOWER);
+      ObjectSetInteger(0, infos[i], OBJPROP_XDISTANCE, delta_x + 5);
+      ObjectSetInteger(0, infos[i], OBJPROP_YDISTANCE, delta_y - 5 + y_size - i*line_size);
+
+      ObjectSetInteger(0, infos[i], OBJPROP_COLOR, clrWhite);
+      ObjectSetInteger(0, infos[i], OBJPROP_FONTSIZE, 10);
+      ObjectSetString(0, infos[i], OBJPROP_TEXT, infos[i]);
+     }
+
+// Iniciar valores
+   for(int i=0; i<ArraySize(infos); i++)
+     {
+      string name = infos[i] + "Valor";
+      if(!ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0))
+         return(INIT_FAILED);
+
+      ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_LOWER);
+      ObjectSetInteger(0, name, OBJPROP_XDISTANCE, delta_x + x_size - 5);
+      ObjectSetInteger(0, name, OBJPROP_YDISTANCE, delta_y - 5 + y_size - i*line_size);
+
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 10);
+      ObjectSetString(0, name, OBJPROP_TEXT, "-");
+     }
+
+//--- Get the handle for Moving Average indicator
+   MA_max_handle=iMA(_Symbol,mm_tempo_grafico,MA_Period_max,deslocamento,MODE_SMA,PRICE_HIGH);
+   MA_min_handle=iMA(_Symbol,mm_tempo_grafico,MA_Period_min,deslocamento,MODE_SMA,PRICE_LOW);
+   MA_filter_handle=iMA(_Symbol,mm_tempo_grafico,MA_filter,0,MODE_SMA,PRICE_CLOSE);
+   media_filtro2_handle = iMA(_Symbol,mm_tempo_grafico,media_filtro2,0,MODE_SMA,PRICE_CLOSE);
+   media_filtro3_handle =iMA(_Symbol,mm_tempo_grafico,media_filtro3,0,MODE_SMA,PRICE_CLOSE);
+//--- What if handle returns Invalid Handle
+   if(MA_max_handle < 0 || MA_min_handle < 0 || MA_filter_handle < 0 || media_filtro2_handle < 0 || media_filtro3_handle < 0)
+     {
+      Alert("Error Creating Handles for indicators - error: ",GetLastError(),"!!");
+     }
+
+// Para adicionar no gráfico o indicador:
+
+
+   ChartIndicatorAdd(0,0,MA_max_handle);
+   ChartIndicatorAdd(0,0,MA_min_handle);
+   ChartIndicatorAdd(0,0,MA_filter_handle);
+   ChartIndicatorAdd(0,0,media_filtro2_handle);
+   ChartIndicatorAdd(0,0,media_filtro3_handle);
+
+   ChartRedraw();
+//---
+
+//---
+   return(INIT_SUCCEEDED);
+  }
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+  {
+
+
+
+//--- Remover o painel do gráfico
+   ObjectDelete(0, "Background");
+   for(int i=0; i<ArraySize(infos); i++)
+      ObjectDelete(0, infos[i]);
+   for(int i=0; i<ArraySize(infos); i++)
+      ObjectDelete(0, infos[i]+"Valor");
+
+
+   IndicatorRelease(MA_max_handle);
+   IndicatorRelease(MA_min_handle);
+   IndicatorRelease(MA_filter_handle);
+   IndicatorRelease(media_filtro2_handle);
+   IndicatorRelease(media_filtro3_handle);
+
+   printf("Deinit reason: %d", reason);
+  }
+
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+  {
+
+
+//Declaração de Variáveis de negocios
+   datetime inicio, fim;
+   double lucro = 0, perda = 0;
+   int trades = 0;
+   double resultado;
+   ulong ticket;
+   double atualresultado;
+
+
+//Obtenção do Histórico
+   MqlDateTime inicio_struct;
+   fim = TimeCurrent(inicio_struct);
+   inicio_struct.hour = 0;
+   inicio_struct.min = 0;
+   inicio_struct.sec = 0;
+   inicio_struct.year =2;
+   inicio = StructToTime(inicio_struct);
+
+   HistorySelect(inicio, fim);
+
+
+
+
+//---
+// Copiar um vetor de dados tamanho três para o vetor mm_Buffer
+   CopyBuffer(MA_max_handle,0,0,3,ma_max_Val);
+   CopyBuffer(MA_min_handle,0,0,3,ma_min_Val);
+   CopyBuffer(MA_filter_handle,0,0,3,ma_filter_Val);
+   CopyBuffer(media_filtro2_handle,0,0,3,media_filtro2_val);
+   CopyBuffer(media_filtro3_handle,0,0,3,media_filtro3_val);
+
+//--- Alimentar Buffers das rates com dados:
+   CopyRates(_Symbol,mm_tempo_grafico,0,6,rates);
+   ArraySetAsSeries(rates,true);
+
+// Ordenar o vetor de dados:
+   ArraySetAsSeries(ma_max_Val,true);
+   ArraySetAsSeries(ma_min_Val,true);
+   ArraySetAsSeries(ma_filter_Val,true);
+   ArraySetAsSeries(media_filtro2_val,true);
+   ArraySetAsSeries(media_filtro3_val,true);
+//---
+
+   ChartIndicatorAdd(0,0,MA_max_handle);
+   ChartIndicatorAdd(0,0,MA_min_handle);
+   ChartIndicatorAdd(0,0,MA_filter_handle);
+   ChartIndicatorAdd(0,0,media_filtro2_handle);
+   ChartIndicatorAdd(0,0,media_filtro3_handle);
+
+   int copied=CopyRates(_Symbol,mm_tempo_grafico,0,2,rates); // Copied all datas
+
+   if(copied<=0)
+     {
+      Print("Erro ao copiar dados de preços ",GetLastError());
+      return;
+     }
+
+//--- Get the last price quote using the MQL5 MqlTick Structure
+   if(!SymbolInfoTick(_Symbol,tick)<0)
+     {
+      Alert("Error getting the latest price quote - error:",GetLastError(),"!!");
+      return;
+     }
+
+//--- Get the details of the latest 3 bars
+   if(CopyRates(_Symbol,mm_tempo_grafico,0,8,rates)<0)
+     {
+      Alert("Error copying rates/history data - error:",GetLastError(),"!!");
+      return;
+     }
+
+
+//--- Copy the new values of our indicators to buffers (arrays) using the handle
+
+   if(CopyBuffer(MA_max_handle,0,0,3,ma_max_Val)<0)
+     {
+      Alert("Error copying Max Moving Average indicator buffer - error:",GetLastError());
+      return;
+     }
+
+   if(CopyBuffer(MA_min_handle,0,0,3,ma_min_Val)<0)
+     {
+      Alert("Error copying Min Moving Average indicator buffer - error:",GetLastError());
+      return;
+     }
+
+   if(CopyBuffer(MA_filter_handle,0,0,3,ma_filter_Val)<0)
+     {
+      Alert("Error copying Min Moving Average indicator buffer - error:",GetLastError());
+      return;
+     }
+
+
+   if(CopyBuffer(media_filtro2_handle,0,0,3,media_filtro2_val)<0)
+     {
+      Alert("Error copying Min Moving Average indicator buffer - error:",GetLastError());
+      return;
+     }
+
+   if(CopyBuffer(media_filtro3_handle,0,0,3,media_filtro3_val)<0)
+     {
+      Alert("Error copying Min Moving Average indicator buffer - error:",GetLastError());
+      return;
+     }
+
+
+
+//--- Atualizar as informações do painel
+   string posicao = "Nenhuma";
+
+//Cálculos
+   for(int i8=0; i8<HistoryDealsTotal(); i8++)
+     {
+      ticket = HistoryDealGetTicket(i8);
+      if(ticket > 0)
+        {
+         if(HistoryDealGetString(ticket, DEAL_SYMBOL) == _Symbol)
+           {
+            trades++;
+            resultado = HistoryDealGetDouble(ticket, DEAL_PROFIT);
+            if(resultado < 0)
+              {
+               NormalizeDouble(perda += -resultado, 2);
+              }
+            else
+              {
+               NormalizeDouble(lucro += resultado, 2);
+              }
+           }
+        }
+
+     }
+
+
+
+   double resultado_liquido = lucro - perda;
+   NormalizeDouble(resultado_liquido, 2);
+
+
+
+   if(PositionSelect(_Symbol))
+     {
+      if(PositionGetInteger(POSITION_TYPE)==POSITION_TYPE_BUY)
+         posicao = "Comprado";
+     }
+
+   if(posicao == "Comprado")
+     {
+
+      NormalizeDouble(atualresultado = PositionGetDouble(POSITION_PROFIT), 2);
+      volume = PositionGetDouble(POSITION_VOLUME);
+      Comprar=true;
+
+     }
+
+   if(posicao == "Nenhuma")
+     {
+      atualresultado = 0;
+      volume =0;
+     }
+
+
+   ObjectSetString(0, infos[0] + "Valor", OBJPROP_TEXT, _Symbol);
+   ObjectSetString(0, infos[1] + "Valor", OBJPROP_TEXT, volume);
+   ObjectSetString(0, infos[2] + "Valor", OBJPROP_TEXT, posicao);
+   ObjectSetString(0, infos[3] + "Valor", OBJPROP_TEXT, atualresultado);
+   ObjectSetString(0, infos[4] + "Valor", OBJPROP_TEXT, trades/2);
+   ObjectSetString(0, infos[5] + "Valor", OBJPROP_TEXT, NormalizeDouble(resultado_liquido, 1));
+
+
+
+
+// LOGICA PARA ATIVAR COMPRA
+
+
+   bool compra_m_filtro = (
+                             (tick.ask < ma_min_Val[0]) &&
+                             (Comprar == false) &&
+                             (encerrarcompras == false) &&
+                             (tick.ask < ma_max_Val[0]) &&
+                             (encerrarcompras_fimdia == false) &&
+                             (ma_max_Val[0] > ma_min_Val[0]) &&
+                             //(posicao == "nenhuma")&&
+                             
+                             //evitar leilao 
+                             (tick.volume != 0) &&
+                             (rates[1].real_volume != 0) &&
+                             (rates[1].tick_volume != 0) &&
+                             (tick.volume_real !=0) &&
+                             (tick.ask > tick.bid)
+                          );
+                          
+
+
+// LÓGICA PARA ATIVAR VENDA
+   bool venda_mm_cros = (
+                           (tick.bid >= ma_max_Val[0]) &&
+                           (Comprar == true)
+                        );
+
+// logica venda stop media movel
+
+   bool venda_stop = (
+                        (rates[1].close < ma_filter_Val[1]) &&
+                        (Comprar == true) &&
+                        (ma_encerra == 1)
+                     );
+
+// logica venda stop tempo
+
+   bool venda_stop_tempo = (
+                              (encerrar_finaldodia == 1) &&
+                              (TimeToString(TimeCurrent(),TIME_MINUTES) > hora_limite_encerra)
+                           );
+
+
+// evitar horariod e leilao acoes
+
+   if(operar_no_fechamento == 1)
+     {
+
+      // compra sem media rapida e lenta como filtro mas media principal como filtro
+
+      if(
+         (media_filtro == 1) &&
+         (media_filtro_media == 0) &&
+         (compra_m_filtro == true) &&
+         (Comprar == false) &&
+         (venda_stop_tempo == false) &&
+         (rates[1].close > ma_filter_Val[0]) &&
+         (rates[1].close > ma_filter_Val[1]) &&
+         (venda_stop == false) &&
+         (tick.last > ma_filter_Val[0])
+      )
+
+        {
+         Comment("temos uma compra com media central filtro");
+         desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
+         CompraAMercado();
+        }
+
+
+      // compra sem media rapida e lenta como filtro sem media principal como filtro
+
+      if(
+         (TimeToString(TimeCurrent(),TIME_MINUTES)>= hora_limite_abre_op) &&
+         (media_filtro == 0) &&
+         (media_filtro_media == 0) &&
+         (compra_m_filtro == true) &&
+         (Comprar == false) &&
+         (venda_stop_tempo == false) &&
+         (venda_stop == false)
+      )
+
+        {
+         Comment("temos uma compra");
+         desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
+         CompraAMercado();
+        }
+
+
+      //compra com media rapida e lenta como filtro e media principal como filtro
+
+      if(
+         (TimeToString(TimeCurrent(),TIME_MINUTES)>= hora_limite_abre_op) &&
+         (media_filtro_media == 1) &&
+         (compra_m_filtro == true) &&
+         (Comprar == false) &&
+         (venda_stop_tempo == false) &&
+         (rates[1].close > ma_filter_Val[0]) &&
+         (rates[1].close > ma_filter_Val[1]) &&
+         (venda_stop == false) &&
+         (tick.last > ma_filter_Val[0]) &&
+         (media_filtro2_val[0] > media_filtro3_val[0])
+      )
+
+        {
+         Comment("temos uma compra usando media tendencia filtro");
+         desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
+         CompraAMercado();
+        }
+
+      //venda normal da operacao na madia da maxima
+
+
+      if(
+         (TimeToString(TimeCurrent(),TIME_MINUTES)>= hora_limite_abre_op) &&
+         (venda_mm_cros == true) &&
+         (Comprar == true)
+      )
+
+        {
+         Comment("temos uma venda");
+         desenhaLinhaVertical("Venda",rates[0].time,clrRed);
+         VendaAMercado();
+        }
+
+      //venda na media filtro principal
+
+      if(
+         (TimeToString(TimeCurrent(),TIME_MINUTES)>= hora_limite_abre_op) &&
+         (venda_stop == true) &&
+         (ma_encerra == 1) &&
+         (Comprar == true)
+      )
+
+        {
+         Comment("temos uma venda stop");
+         desenhaLinhaVertical("Venda",rates[0].time,clrRed);
+         FechaCompra();
+        }
+
+      //venda no tempo
+
+      if(
+         (TimeToString(TimeCurrent(),TIME_MINUTES)>= hora_limite_abre_op) &&
+         (venda_stop_tempo == true) &&
+         (encerrar_finaldodia == 1) &&
+         (Comprar == true)
+      )
+
+        {
+         Comment("temos uma venda stop tempo");
+         desenhaLinhaVertical("Venda",rates[0].time,clrRed);
+         FechaCompra();
+        }
+     }
+
+
+
+// nao evitar leilao de abertura para mini indice
+   if(operar_no_fechamento == 0)
+     {
+
+      // compra sem media rapida e lenta como filtro mas media principal como filtro
+
+      if(
+         (media_filtro == 1) &&
+         (media_filtro_media == 0) &&
+         (compra_m_filtro == true) &&
+         (Comprar == false) &&
+         (venda_stop_tempo == false) &&
+         (rates[1].close > ma_filter_Val[0]) &&
+         (rates[1].close > ma_filter_Val[1]) &&
+         (venda_stop == false) &&
+         (tick.last > ma_filter_Val[0])
+      )
+
+        {
+         Comment("temos uma compra com media central filtro");
+         desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
+         CompraAMercado();
+        }
+
+
+      // compra sem media rapida e lenta como filtro sem media principal como filtro
+
+      if(
+         (media_filtro == 0) &&
+         (media_filtro_media == 0) &&
+         (compra_m_filtro == true) &&
+         (Comprar == false) &&
+         (venda_stop_tempo == false) &&
+         (venda_stop == false)
+      )
+
+        {
+         Comment("temos uma compra");
+         desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
+         CompraAMercado();
+        }
+
+
+      //compra com media rapida e lenta como filtro e media principal como filtro
+
+      if(
+         (media_filtro_media == 1) &&
+         (compra_m_filtro == true) &&
+         (Comprar == false) &&
+         (venda_stop_tempo == false) &&
+         (rates[1].close > ma_filter_Val[0]) &&
+         (rates[1].close > ma_filter_Val[1]) &&
+         (venda_stop == false) &&
+         (tick.last > ma_filter_Val[0]) &&
+         (media_filtro2_val[0] > media_filtro3_val[0])
+      )
+
+        {
+         Comment("temos uma compra usando media tendencia filtro");
+         desenhaLinhaVertical("Compra",rates[0].time,clrBlue);
+         CompraAMercado();
+        }
+
+      //venda normal da operacao na madia da maxima
+
+
+      if((venda_mm_cros == true) && (Comprar == true))
+        {
+         Comment("temos uma venda");
+         desenhaLinhaVertical("Venda",rates[0].time,clrRed);
+         VendaAMercado();
+        }
+
+      //venda na media filtro principal
+
+      if((venda_stop == true) && (ma_encerra == 1) && (Comprar == true))
+        {
+         Comment("temos uma venda stop");
+         desenhaLinhaVertical("Venda",rates[0].time,clrRed);
+         FechaCompra();
+        }
+
+      //venda no tempo
+
+      if((venda_stop_tempo == true) && (encerrar_finaldodia == 1) && (Comprar == true))
+        {
+         Comment("temos uma venda stop tempo");
+         desenhaLinhaVertical("Venda",rates[0].time,clrRed);
+         FechaCompra();
+        }
+     }
+
+   if(operacoes_daytrade == 1)
+
+     {
+
+      if(TimeToString(TimeCurrent(),TIME_MINUTES) >= hora_limite_fecha_op && (i3<2))
+        {
+
+         Print("-----> Fim do Tempo Operacional");
+         i3 = i3+1;
+
+         encerrarcompras = true;
+
+        }
+
+      if(TimeToString(TimeCurrent(),TIME_MINUTES) < hora_limite_fecha_op)
+        {
+         encerrarcompras = false;
+         i3 = 1;
+        }
+     }
+
+
+
+
+   if(encerrar_finaldodia == 1)
+
+     {
+
+      if(TimeToString(TimeCurrent(),TIME_MINUTES) > hora_limite_encerra && (i2<2))
+        {
+
+         Print("-----> Fim do Tempo Operacional encerrando operações ");
+         i2 = i2+1;
+
+         encerrarcompras_fimdia = true;
+
+        }
+
+      if(TimeToString(TimeCurrent(),TIME_MINUTES) < hora_limite_encerra)
+        {
+         encerrarcompras_fimdia = false;
+         i2 = 1;
+        }
+     }
+
+
+  }
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| FUNÇÕES PARA AUXILIAR NA VISUALIZAÇÃO DA ESTRATÉGIA              |
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void desenhaLinhaVertical(string nome, datetime dt, color cor = clrAliceBlue)
+  {
+   ObjectDelete(0,nome);
+   ObjectCreate(0,nome,OBJ_ARROW_THUMB_UP,0,dt,0);
+   ObjectSetInteger(0,nome,OBJPROP_COLOR,cor);
+  }
+
+//+------------------------------------------------------------------+
+//| FUNÇÕES PARA ENVIO DE ORDENS                                     |
+//+------------------------------------------------------------------+
+
+
+// COMPRA A MERCADO
+void CompraAMercado() // bser na documentação ordem das variaveis!!!
+  {
+   MqlTradeRequest   requisicao;    // requisição
+   MqlTradeResult    resposta;      // resposta
+
+   ZeroMemory(requisicao);
+   ZeroMemory(resposta);
+
+//--- Cacacterísticas da ordem de Compra
+   requisicao.action       = TRADE_ACTION_DEAL;                            // Executa ordem a mercado
+   requisicao.magic        = magic_number;                                 // Nº mágico da ordem
+   requisicao.symbol       = _Symbol;                                      // Simbolo do ativo
+   requisicao.volume       = num_lots;                                     // Nº de Lotes
+   requisicao.price        = NormalizeDouble(tick.ask,_Digits);            // Preço para a compra
+// requisicao.sl           = NormalizeDouble(tick.ask - SL*_Point,_Digits);// Preço Stop Loss
+// requisicao.tp           = NormalizeDouble(tick.ask + TK*_Point,_Digits);// Alvo de Ganho - Take Profit
+   requisicao.deviation    = 0;                                            // Desvio Permitido do preço
+   requisicao.type         = ORDER_TYPE_BUY;                               // Tipo da Ordem
+   requisicao.type_filling = ORDER_FILLING_FOK;                            // Tipo de Preenchimento da ordem
+
+//---
+
+   OrderSend(requisicao,resposta);
+//---
+   if(resposta.retcode == 10008 || resposta.retcode == 10009)
+     {
+      Print("Ordem de Compra executada com sucesso!");
+      Comprar = true ;
+     }
+   else
+     {
+      Print("Erro ao enviar Ordem Compra. Erro = ", GetLastError());
+      ResetLastError();
+     }
+  }
+
+// VENDA A MERCADO
+void VendaAMercado()
+  {
+   MqlTradeRequest   requisicao;    // requisição
+   MqlTradeResult    resposta;      // resposta
+
+   ZeroMemory(requisicao);
+   ZeroMemory(resposta);
+
+//--- Cacacterísticas da ordem de Venda
+   requisicao.action       = TRADE_ACTION_DEAL;                            // Executa ordem a mercado
+   requisicao.magic        = magic_number;                                 // Nº mágico da ordem
+   requisicao.symbol       = _Symbol;                                      // Simbolo do ativo
+   requisicao.volume       = volume;                                     // Nº de Lotes
+   requisicao.price        = NormalizeDouble(tick.bid,_Digits);            // Preço para Venda
+// requisicao.sl           = NormalizeDouble(tick.bid + SL*_Point,_Digits);// Preço Stop Loss
+// requisicao.tp           = NormalizeDouble(tick.bid - TK*_Point,_Digits);// Alvo de Ganho - Take Profit
+   requisicao.deviation    = 0;                                            // Desvio Permitido do preço
+   requisicao.type         = ORDER_TYPE_SELL;                              // Tipo da Ordem
+   requisicao.type_filling = ORDER_FILLING_FOK;                            // Tipo deo Preenchimento da ordem
+//---
+   OrderSend(requisicao,resposta);
+
+//---
+   if(resposta.retcode == 10008 || resposta.retcode == 10009)
+     {
+      Print("Ordem de Venda executada com sucesso!");
+      Comprar = false;
+     }
+   else
+     {
+      Print("Erro ao enviar Ordem Venda. Erro = ", GetLastError());
+      ResetLastError();
+     }
+  }
+
+//---
+void FechaCompra()
+  {
+   MqlTradeRequest   requisicao;    // requisição
+   MqlTradeResult    resposta;      // resposta
+
+   ZeroMemory(requisicao);
+   ZeroMemory(resposta);
+
+//--- Cacacterísticas da ordem de Venda
+   requisicao.action       = TRADE_ACTION_DEAL;                            // Executa ordem a mercado
+   requisicao.magic        = magic_number;                                 // Nº mágico da ordem
+   requisicao.symbol       = _Symbol;                                      // Simbolo do ativo
+   requisicao.volume       = volume;                                     // Nº de Lotes
+   requisicao.price        = NormalizeDouble(tick.bid,_Digits);            // Preço para Venda
+// requisicao.sl           = NormalizeDouble(tick.bid + SL*_Point,_Digits);// Preço Stop Loss
+// requisicao.tp           = NormalizeDouble(tick.bid - TK*_Point,_Digits);// Alvo de Ganho - Take Profit
+   requisicao.deviation    = 0;                                            // Desvio Permitido do preço
+   requisicao.type         = ORDER_TYPE_SELL;                              // Tipo da Ordem
+   requisicao.type_filling = ORDER_FILLING_FOK;                            // Tipo deo Preenchimento da ordem
+
+//---
+   OrderSend(requisicao,resposta);
+
+//---
+   if(resposta.retcode == 10008 || resposta.retcode == 10009)
+     {
+      Print("Ordem de Venda executada com sucesso! stop");
+      Comprar = false;
+     }
+   else
+     {
+      Print("Erro ao enviar Ordem Venda. Erro = ", GetLastError());
+      ResetLastError();
+     }
+  }
+//+------------------------------------------------------------------+
